@@ -1,0 +1,156 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Grocery List</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+      background: #f9f9f9;
+    }
+    h1 {
+      text-align: center;
+    }
+    h2 {
+      margin-top: 30px;
+      border-bottom: 2px solid #555;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 10px;
+    }
+    th, td {
+      padding: 8px;
+      border-bottom: 1px solid #ccc;
+    }
+    input[type="text"] {
+      width: 90%;
+      padding: 5px;
+      font-size: 16px;
+    }
+    input[type="checkbox"] {
+      transform: scale(1.3);
+    }
+    .hidden {
+      display: none;
+    }
+    button {
+      margin-top: 5px;
+      padding: 5px 10px;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+
+<h1>Grocery List</h1>
+
+<div id="list-container"></div>
+
+<script>
+const supabase = window.supabase.createClient(
+  'https://tgyypracwszmhmoicvxa.supabase.co',
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRneXlwcmFjd3N6bWhtb2ljdnhhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTE0NjM4MDgsImV4cCI6MjA2NzAzOTgwOH0.gYCBsXgndLJEHlIC6Logr7J0IMe8wehfWiVehLImmDg'
+);
+
+const CATEGORIES = [
+  "Fruits and Vegetables",
+  "Dairy",
+  "Bread",
+  "Meats",
+  "Other"
+];
+
+async function loadList() {
+  const container = document.getElementById("list-container");
+  container.innerHTML = "";
+
+  const { data, error } = await supabase
+    .from("grocery_items")
+    .select("*")
+    .eq("checked", false)
+    .order("created_at", { ascending: true });
+
+  const grouped = {};
+  CATEGORIES.forEach(cat => grouped[cat] = []);
+  data.forEach(row => {
+    if (grouped[row.category]) grouped[row.category].push(row);
+  });
+
+  CATEGORIES.forEach(category => {
+    const section = document.createElement("div");
+    section.className = "category";
+    section.dataset.category = category;
+    section.innerHTML = `
+      <h2>${category}</h2>
+      <table>
+        <thead><tr><th style="width: 40px;">✓</th><th style="text-align: left;">Item</th><th style="text-align: left;">Qty</th></tr></thead>
+        <tbody>
+          ${grouped[category].map(item => `
+            <tr data-id="${item.id}">
+              <td style="text-align: center;"><input type="checkbox" onclick="hideRow(this, '${item.id}')"></td>
+              <td style="text-align: left;">${item.item}</td>
+              <td>${item.quantity || ''}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+      <input type="text" placeholder="New item name">
+      <input type="text" placeholder="Qty">
+      <button onclick="addRow(this)">Add Item</button>
+    `;
+    container.appendChild(section);
+  });
+}
+
+async function hideRow(checkbox, id) {
+  const row = checkbox.closest("tr");
+  row.classList.add("hidden");
+  await supabase.from("grocery_items").update({ checked: true }).eq("id", id);
+}
+
+async function addRow(button) {
+  const container = button.closest(".category");
+  const inputs = container.querySelectorAll("input[type='text']");
+  const item = inputs[0].value.trim();
+  const qty = inputs[1].value.trim();
+  const category = container.dataset.category;
+  if (!item) return;
+
+  await supabase.from("grocery_items").insert([{ category, item, quantity: qty }]);
+  await loadList();
+}
+
+function copyListToClipboard() {
+  let text = "🧺 Grocery List\n\n";
+  document.querySelectorAll(".category").forEach(category => {
+    const catName = category.getAttribute("data-category") || category.querySelector("h2").textContent.trim();
+    let items = [];
+    category.querySelectorAll("tbody tr:not(.hidden)").forEach(row => {
+      const item = row.cells[1].textContent.trim();
+      const qty = row.cells[2].textContent.trim();
+      if (item) items.push(`- ${item}${qty ? " (" + qty + ")" : ""}`);
+    });
+    if (items.length > 0) {
+      text += catName + "\n" + items.join("\n") + "\n\n";
+    }
+  });
+
+  navigator.clipboard.writeText(text).then(() => {
+    alert("List copied! You can now paste it into a text.");
+  }).catch(err => {
+    alert("Failed to copy. Try selecting manually.");
+  });
+}
+
+loadList();
+</script>
+
+<button onclick="copyListToClipboard()" style="position:fixed;top:20px;right:20px;padding:10px 20px;font-size:16px;z-index:999;">Copy List</button>
+
+</body>
+</html>
